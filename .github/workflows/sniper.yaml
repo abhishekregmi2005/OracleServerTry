@@ -2,13 +2,13 @@ name: Oracle Capacity Sniper
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/15 * * * *'    # Runs every 15 minutes
   workflow_dispatch:
 
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    
+
     env:
       OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
       OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
@@ -57,7 +57,7 @@ jobs:
               availabilityConfig: { isLiveMigrationPreferred: false }
             }' > launch.json
 
-          echo "✅ Launch config created for instance: AI-Server-${TIMESTAMP}"
+          echo "Launch config created → AI-Server-${TIMESTAMP}"
 
       - name: Check for Existing Instance
         id: check
@@ -70,7 +70,7 @@ jobs:
             --raw-output 2>/dev/null || echo "")
 
           if [ -n "$EXISTING" ]; then
-            echo "⚠️ Instance already exists. Skipping launch."
+            echo "⚠️ An instance already exists. Skipping launch."
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -85,21 +85,4 @@ jobs:
 
       - name: Success Notification
         if: steps.launch.outcome == 'success'
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_COLOR: good
-          SLACK_TITLE: "🎉 Oracle A1 Flex Instance Sniped Successfully!"
-          SLACK_MESSAGE: "Instance launched in ${{ secrets.OCI_REGION }} | AD: ${{ secrets.OCI_AD }}"
-          SLACK_USERNAME: OracleSniper
-          SLACK_ICON: https://github.com/fluidicon.png
-
-      - name: Failure Notification
-        if: failure() && steps.launch.outcome != 'success'
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_COLOR: danger
-          SLACK_TITLE: "❌ Oracle Sniper Failed"
-          SLACK_MESSAGE: "Failed to launch instance in ${{ secrets.OCI_REGION }}"
-          SLACK_USERNAME: OracleSniper
+        uses: rtCamp
