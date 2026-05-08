@@ -1,21 +1,25 @@
 name: Oracle Capacity Sniper
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    # 12 scheduled runs/day * 5 min timeout stays below 2,000 min/month.
+    - cron: '17 */2 * * *'
   workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: oracle-capacity-sniper
+  cancel-in-progress: true
+
 jobs:
   snipe:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
-      OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
-      OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
-      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
-      OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
+      INSTANCE_DISPLAY_NAME: AI-Server
+      MAX_ATTEMPTS: 3
+      RETRY_SECONDS: 45
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Write launch config
         env:
           OCI_AD: ${{ secrets.OCI_AD }}
@@ -31,7 +35,7 @@ jobs:
             '{
               availabilityDomain: $ad,
               compartmentId: $cid,
-              displayName: "AI-Server",
+              displayName: env.INSTANCE_DISPLAY_NAME,
               shape: "VM.Standard.A1.Flex",
               shapeConfig: { ocpus: 4, memoryInGBs: 24 },
               sourceDetails: {
@@ -44,22 +48,57 @@ jobs:
                 assignPublicIp: true
               },
               metadata: { ssh_authorized_keys: $sshkey }
-            }' > ${{ github.workspace }}/launch.json
+            }' > "$RUNNER_TEMP/launch.json"
 
       - name: Install OCI CLI
-        run: python -m pip install --user oci-cli
+        run: python -m pip install --user --disable-pip-version-check --quiet oci-cli
+
+      - name: Check for existing instance
+        id: existing
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
+          OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_AD: ${{ secrets.OCI_AD }}
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+
+          instances="$(oci compute instance list \
+            --compartment-id "$OCI_COMPARTMENT_ID" \
+            --availability-domain "$OCI_AD" \
+            --display-name "$INSTANCE_DISPLAY_NAME" \
+            --all \
+            --output json)"
+          existing="$(printf '%s\n' "$instances" | jq -r '[.data[] | select(.["lifecycle-state"] != "TERMINATED") | "\(.id)|\(.["lifecycle-state"])"][0] // ""')"
+
+          if [ -n "$existing" ]; then
+            state="${existing#*|}"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Existing ${INSTANCE_DISPLAY_NAME} instance found in ${state} state; skipping launch."
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No existing ${INSTANCE_DISPLAY_NAME} instance found; launch attempts will run."
+          fi
 
       - name: Launch Instance
+        if: steps.existing.outputs.found != 'true'
         env:
-          MAX_ATTEMPTS: 10
-          RETRY_SECONDS: 60
+          OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
+          OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
         run: |
           set -u
           export PATH="$HOME/.local/bin:$PATH"
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "::group::Launch attempt ${attempt}/${MAX_ATTEMPTS}"
-            if output="$(oci compute instance launch --from-json "file://${{ github.workspace }}/launch.json" 2>&1)"; then
+            if output="$(oci compute instance launch --from-json "file://$RUNNER_TEMP/launch.json" 2>&1)"; then
               status=0
             else
               status=$?
