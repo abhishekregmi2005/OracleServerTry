@@ -23,14 +23,14 @@ jobs:
         uses: oracle-actions/run-oci-cli-command@v1.3.2
         with:
           silent: false
-          command: >
-            compute instance launch 
-            --availability-domain "LAtS:US-CHICAGO-1-AD-1" 
-            --compartment-id "${{ secrets.OCI_COMPARTMENT_ID }}" 
-            --shape "VM.Standard.A1.Flex" 
-            --shape-config '{"ocpus":4,"memoryInGBs":24}' 
-            --subnet-id "${{ secrets.OCI_SUBNET_ID }}" 
-            --image-id "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq" 
-            --assign-public-ip true 
-            --ssh-authorized-keys-file "ssh_key.pub" 
+          command: >-
+            compute instance launch
+            --availability-domain "LAtS:US-CHICAGO-1-AD-1"
+            --compartment-id "${{ secrets.OCI_COMPARTMENT_ID }}"
+            --shape "VM.Standard.A1.Flex"
+            --shape-config "{\"ocpus\":4,\"memoryInGBs\":24}"
+            --subnet-id "${{ secrets.OCI_SUBNET_ID }}"
+            --image-id "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq"
+            --assign-public-ip true
+            --ssh-authorized-keys-file "ssh_key.pub"
             --display-name "AI-Server"
