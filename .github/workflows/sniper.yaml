@@ -34,6 +34,7 @@ jobs:
               "sourceType": "image",
               "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq"
             },
+            "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
             "createVnicDetails": {
               "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
               "assignPublicIp": true
