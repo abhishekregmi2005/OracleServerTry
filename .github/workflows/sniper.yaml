@@ -29,25 +29,35 @@ jobs:
         run: |
           TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
           
-          jq -n \
-            --arg ad "$OCI_AD" \
-            --arg cid "$OCI_COMPARTMENT_ID" \
-            --arg subnet "$OCI_SUBNET_ID" \
-            --arg sshkey "$SSH_PUBLIC_KEY" \
-            --arg name "AI-Server-${TIMESTAMP}" \
-            '{
-              availabilityDomain: $ad,
-              compartmentId: $cid,
-              displayName: $name,
-              shape: "VM.Standard.A1.Flex",
-              shapeConfig: { ocpus: 4, memoryInGBs: 24 },
-              sourceDetails: {
-                sourceType: "image",
-                imageId: "ocid1.image.oc1.us-chicago-1.aaaaaaaaqzxgc5f4hbxsoi4mhogsodroy5wgnvxcpuwpt77gt4wl3a3x6m2q"
-              },
-              subnetId: $subnet,
-              createVnicDetails: {
-                subnetId: $subnet,
-                assignPublicIp: true
-              },
-              metadata: { ssh_authorized_keys: $sshkey
+          cat > launch.json << 'EOF'
+          {
+            "availabilityDomain": "${OCI_AD}",
+            "compartmentId": "${OCI_COMPARTMENT_ID}",
+            "displayName": "AI-Server-${TIMESTAMP}",
+            "shape": "VM.Standard.A1.Flex",
+            "shapeConfig": {
+              "ocpus": 4,
+              "memoryInGBs": 24
+            },
+            "sourceDetails": {
+              "sourceType": "image",
+              "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaaqzxgc5f4hbxsoi4mhogsodroy5wgnvxcpuwpt77gt4wl3a3x6m2q"
+            },
+            "subnetId": "${OCI_SUBNET_ID}",
+            "createVnicDetails": {
+              "subnetId": "${OCI_SUBNET_ID}",
+              "assignPublicIp": true
+            },
+            "metadata": {
+              "ssh_authorized_keys": "${SSH_PUBLIC_KEY}"
+            },
+            "availabilityConfig": {
+              "isLiveMigrationPreferred": false
+            }
+          }
+          EOF
+
+          # Substitute variables
+          sed -i "s|\${OCI_AD}|$OCI_AD|g" launch.json
+          sed -i "s|\${OCI_COMPARTMENT_ID}|$OCI_COMPARTMENT_ID|g" launch.json
+          sed -i "s|\${OCI_SUB
