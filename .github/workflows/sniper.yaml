@@ -17,11 +17,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Write launch config
+        env:
+          OCI_AD: ${{ secrets.OCI_AD }}
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
-          cat > ${{ github.workspace }}/launch.json << 'EOF'
+          cat > ${{ github.workspace }}/launch.json <<EOF
           {
-            "availabilityDomain": "${{ secrets.OCI_AD }}",
-            "compartmentId": "${{ secrets.OCI_COMPARTMENT_ID }}",
+            "availabilityDomain": "${OCI_AD}",
+            "compartmentId": "${OCI_COMPARTMENT_ID}",
             "displayName": "AI-Server",
             "shape": "VM.Standard.A1.Flex",
             "shapeConfig": {
@@ -32,12 +37,13 @@ jobs:
               "sourceType": "image",
               "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq"
             },
+            "subnetId": "${OCI_SUBNET_ID}",
             "createVnicDetails": {
-              "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
+              "subnetId": "${OCI_SUBNET_ID}",
               "assignPublicIp": true
             },
             "metadata": {
-              "ssh_authorized_keys": "${{ secrets.SSH_PUBLIC_KEY }}"
+              "ssh_authorized_keys": "${SSH_PUBLIC_KEY}"
             }
           }
           EOF
