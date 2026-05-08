@@ -2,7 +2,7 @@ name: Oracle Capacity Sniper
 
 on:
   schedule:
-    - cron: '*/15 * * * *'    # Runs every 15 minutes
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -19,9 +19,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Write Launch Config
         env:
@@ -53,36 +50,4 @@ jobs:
                 subnetId: $subnet,
                 assignPublicIp: true
               },
-              metadata: { ssh_authorized_keys: $sshkey },
-              availabilityConfig: { isLiveMigrationPreferred: false }
-            }' > launch.json
-
-          echo "Launch config created → AI-Server-${TIMESTAMP}"
-
-      - name: Check for Existing Instance
-        id: check
-        continue-on-error: true
-        run: |
-          echo "Checking for existing AI-Server instances..."
-          EXISTING=$(oci compute instance list \
-            --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} \
-            --query "data[?contains(displayName, 'AI-Server') && lifecycleState != 'TERMINATED'].id" \
-            --raw-output 2>/dev/null || echo "")
-
-          if [ -n "$EXISTING" ]; then
-            echo "⚠️ An instance already exists. Skipping launch."
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Launch Instance
-        if: steps.check.outputs.exists == 'false'
-        id: launch
-        uses: oracle-actions/run-oci-cli-command@v1.3.2
-        with:
-          command: compute instance launch --from-json file://launch.json --wait-for-state RUNNING --max-wait-seconds 600
-
-      - name: Success Notification
-        if: steps.launch.outcome == 'success'
-        uses: rtCamp
+              metadata: { ssh_authorized_keys: $sshkey
