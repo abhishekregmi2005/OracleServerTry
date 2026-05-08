@@ -22,23 +22,25 @@ jobs:
         run: |
           cat > launch.json <<'EOF'
           {
-            "availabilityDomain": "LAtS:US-CHICAGO-1-AD-1",
+            "availabilityDomain": "${{ secrets.OCI_AD }}",
             "compartmentId": "${{ secrets.OCI_COMPARTMENT_ID }}",
+            "displayName": "AI-Server",
             "shape": "VM.Standard.A1.Flex",
             "shapeConfig": {
               "ocpus": 4,
               "memoryInGBs": 24
             },
-            "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
-            "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq",
+            "sourceDetails": {
+              "sourceType": "image",
+              "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq"
+            },
             "createVnicDetails": {
-              "assignPublicIp": true,
-              "subnetId": "${{ secrets.OCI_SUBNET_ID }}"
+              "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
+              "assignPublicIp": true
             },
             "metadata": {
               "ssh_authorized_keys": "${{ secrets.SSH_PUBLIC_KEY }}"
-            },
-            "displayName": "AI-Server"
+            }
           }
           EOF
 
