@@ -35,7 +35,7 @@ jobs:
             },
             "sourceDetails": {
               "sourceType": "image",
-              "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq"
+              "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaaqzxgc5f4hbxsoi4mhogsodroy5wgnvxcpuwpt77gt4wl3a3x6m2q"
             },
             "subnetId": "${OCI_SUBNET_ID}",
             "createVnicDetails": {
