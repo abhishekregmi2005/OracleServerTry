@@ -23,34 +23,32 @@ jobs:
           OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
-          cat > ${{ github.workspace }}/launch.json <<EOF
-          {
-            "availabilityDomain": "${OCI_AD}",
-            "compartmentId": "${OCI_COMPARTMENT_ID}",
-            "displayName": "AI-Server",
-            "shape": "VM.Standard.A1.Flex",
-            "shapeConfig": {
-              "ocpus": 4,
-              "memoryInGBs": 24
-            },
-            "sourceDetails": {
-              "sourceType": "image",
-              "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaaqzxgc5f4hbxsoi4mhogsodroy5wgnvxcpuwpt77gt4wl3a3x6m2q"
-            },
-            "subnetId": "${OCI_SUBNET_ID}",
-            "createVnicDetails": {
-              "subnetId": "${OCI_SUBNET_ID}",
-              "assignPublicIp": true
-            },
-            "metadata": {
-              "ssh_authorized_keys": "${SSH_PUBLIC_KEY}"
-            }
-          }
-          EOF
+          jq -n \
+            --arg ad "$OCI_AD" \
+            --arg cid "$OCI_COMPARTMENT_ID" \
+            --arg subnet "$OCI_SUBNET_ID" \
+            --arg sshkey "$SSH_PUBLIC_KEY" \
+            '{
+              availabilityDomain: $ad,
+              compartmentId: $cid,
+              displayName: "AI-Server",
+              shape: "VM.Standard.A1.Flex",
+              shapeConfig: { ocpus: 4, memoryInGBs: 24 },
+              sourceDetails: {
+                sourceType: "image",
+                imageId: "ocid1.image.oc1.us-chicago-1.aaaaaaaaqzxgc5f4hbxsoi4mhogsodroy5wgnvxcpuwpt77gt4wl3a3x6m2q"
+              },
+              subnetId: $subnet,
+              createVnicDetails: {
+                subnetId: $subnet,
+                assignPublicIp: true
+              },
+              metadata: { ssh_authorized_keys: $sshkey }
+            }' > ${{ github.workspace }}/launch.json
 
       - name: Launch Instance
         continue-on-error: true
         uses: oracle-actions/run-oci-cli-command@v1.3.2
         with:
-          silent: true
+          silent: false
           command: compute instance launch --from-json file://${{ github.workspace }}/launch.json
