@@ -1,8 +1,12 @@
 name: Oracle Capacity Sniper
 on:
   schedule:
-    # 12 scheduled runs/day * 5 min timeout stays below 2,000 min/month.
-    - cron: '17 */2 * * *'
+    # Student/GitHub Pro budget: 19 runs/day * 5 min timeout * 31 days = 2,945 min/month.
+    # Runs are spaced about 75 minutes apart and offset from the top of the hour.
+    - cron: '7 0,5,10,15,20 * * *'
+    - cron: '22 1,6,11,16,21 * * *'
+    - cron: '37 2,7,12,17,22 * * *'
+    - cron: '52 3,8,13,18 * * *'
   workflow_dispatch:
 
 permissions: {}
