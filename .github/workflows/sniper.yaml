@@ -3,7 +3,6 @@ on:
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
-
 jobs:
   snipe:
     runs-on: ubuntu-latest
@@ -13,14 +12,13 @@ jobs:
       OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
       OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
       OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Write launch config
         run: |
-          cat > launch.json <<'EOF'
+          cat > ${{ github.workspace }}/launch.json << 'EOF'
           {
             "availabilityDomain": "${{ secrets.OCI_AD }}",
             "compartmentId": "${{ secrets.OCI_COMPARTMENT_ID }}",
@@ -34,7 +32,6 @@ jobs:
               "sourceType": "image",
               "imageId": "ocid1.image.oc1.us-chicago-1.aaaaaaaardyalqgy2m4yenctp5x54zmoukyhurifsae7zqwk345sekcircrq"
             },
-            "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
             "createVnicDetails": {
               "subnetId": "${{ secrets.OCI_SUBNET_ID }}",
               "assignPublicIp": true
@@ -45,8 +42,11 @@ jobs:
           }
           EOF
 
+      - name: Verify launch config
+        run: cat ${{ github.workspace }}/launch.json
+
       - name: Launch Instance
         uses: oracle-actions/run-oci-cli-command@v1.3.2
         with:
           silent: false
-          command: compute instance launch --from-json file://launch.json
+          command: compute instance launch --from-json file://${{ github.workspace }}/launch.json
