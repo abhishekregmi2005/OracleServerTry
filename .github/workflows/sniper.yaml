@@ -48,11 +48,9 @@ jobs:
           }
           EOF
 
-      - name: Verify launch config
-        run: cat ${{ github.workspace }}/launch.json
-
       - name: Launch Instance
+        continue-on-error: true
         uses: oracle-actions/run-oci-cli-command@v1.3.2
         with:
-          silent: false
+          silent: true
           command: compute instance launch --from-json file://${{ github.workspace }}/launch.json
