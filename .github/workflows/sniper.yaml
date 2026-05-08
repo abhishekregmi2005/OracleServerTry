@@ -59,8 +59,11 @@ jobs:
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "::group::Launch attempt ${attempt}/${MAX_ATTEMPTS}"
-            output="$(oci compute instance launch --from-json "file://${{ github.workspace }}/launch.json" 2>&1)"
-            status=$?
+            if output="$(oci compute instance launch --from-json "file://${{ github.workspace }}/launch.json" 2>&1)"; then
+              status=0
+            else
+              status=$?
+            fi
             printf '%s\n' "$output"
             echo "::endgroup::"
 
