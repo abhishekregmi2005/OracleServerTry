@@ -1,37 +1,47 @@
 name: Oracle Capacity Sniper
+
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
+
 jobs:
   snipe:
     runs-on: ubuntu-latest
+    
     env:
       OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
       OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
       OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
       OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
       OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Write launch config
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Write Launch Config
         env:
           OCI_AD: ${{ secrets.OCI_AD }}
           OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
           OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          
           jq -n \
             --arg ad "$OCI_AD" \
             --arg cid "$OCI_COMPARTMENT_ID" \
             --arg subnet "$OCI_SUBNET_ID" \
             --arg sshkey "$SSH_PUBLIC_KEY" \
+            --arg name "AI-Server-${TIMESTAMP}" \
             '{
               availabilityDomain: $ad,
               compartmentId: $cid,
-              displayName: "AI-Server",
+              displayName: $name,
               shape: "VM.Standard.A1.Flex",
               shapeConfig: { ocpus: 4, memoryInGBs: 24 },
               sourceDetails: {
@@ -43,12 +53,53 @@ jobs:
                 subnetId: $subnet,
                 assignPublicIp: true
               },
-              metadata: { ssh_authorized_keys: $sshkey }
-            }' > ${{ github.workspace }}/launch.json
+              metadata: { ssh_authorized_keys: $sshkey },
+              availabilityConfig: { isLiveMigrationPreferred: false }
+            }' > launch.json
+
+          echo "✅ Launch config created for instance: AI-Server-${TIMESTAMP}"
+
+      - name: Check for Existing Instance
+        id: check
+        continue-on-error: true
+        run: |
+          echo "Checking for existing AI-Server instances..."
+          EXISTING=$(oci compute instance list \
+            --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} \
+            --query "data[?contains(displayName, 'AI-Server') && lifecycleState != 'TERMINATED'].id" \
+            --raw-output 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ]; then
+            echo "⚠️ Instance already exists. Skipping launch."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Launch Instance
-        continue-on-error: true
+        if: steps.check.outputs.exists == 'false'
+        id: launch
         uses: oracle-actions/run-oci-cli-command@v1.3.2
         with:
-          silent: false
-          command: compute instance launch --from-json file://${{ github.workspace }}/launch.json
+          command: compute instance launch --from-json file://launch.json --wait-for-state RUNNING --max-wait-seconds 600
+
+      - name: Success Notification
+        if: steps.launch.outcome == 'success'
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: good
+          SLACK_TITLE: "🎉 Oracle A1 Flex Instance Sniped Successfully!"
+          SLACK_MESSAGE: "Instance launched in ${{ secrets.OCI_REGION }} | AD: ${{ secrets.OCI_AD }}"
+          SLACK_USERNAME: OracleSniper
+          SLACK_ICON: https://github.com/fluidicon.png
+
+      - name: Failure Notification
+        if: failure() && steps.launch.outcome != 'success'
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: danger
+          SLACK_TITLE: "❌ Oracle Sniper Failed"
+          SLACK_MESSAGE: "Failed to launch instance in ${{ secrets.OCI_REGION }}"
+          SLACK_USERNAME: OracleSniper
