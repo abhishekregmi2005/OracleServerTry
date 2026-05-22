@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: pip install --quiet oci requests
+        run: pip install --quiet oci requests oci-cli
 
       - name: Check for existing instance
         id: existing
@@ -39,15 +39,14 @@ jobs:
           OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
           OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
         run: |
-          pip install --quiet oci-cli
           for ad in "eqhO:US-CHICAGO-1-AD-1" "eqhO:US-CHICAGO-1-AD-2" "eqhO:US-CHICAGO-1-AD-3"; do
             instances=$(oci compute instance list \
               --compartment-id "$OCI_COMPARTMENT_ID" \
               --availability-domain "$ad" \
               --display-name "AI-Dev-Server" \
               --all --output json 2>/dev/null || echo '{"data":[]}')
-            found=$(echo "$instances" | jq -r '[.data[] | select(.["lifecycle-state"] != "TERMINATED")] | length')
-            if [ "$found" -gt 0 ]; then
+            found=$(echo "$instances" | jq '[.data[] | select(.["lifecycle-state"] != "TERMINATED")] | length')
+            if [ "$found" -gt 0 ] 2>/dev/null; then
               echo "found=true" >> "$GITHUB_OUTPUT"
               echo "Existing instance found in $ad. Skipping."
               exit 0
