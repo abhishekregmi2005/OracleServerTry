@@ -7,21 +7,18 @@ import time
 import random
 import os
 import sys
+import tempfile
 
 key_content = os.environ["OCI_KEY_CONTENT"]
-config = {
-    "user": os.environ["OCI_USER_OCID"],
-    "fingerprint": os.environ["OCI_FINGERPRINT"],
-    "tenancy": os.environ["OCI_TENANCY_OCID"],
-    "region": os.environ.get("OCI_REGION", "us-chicago-1"),
-    "key_content": key_content,
-}
+with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
+    f.write(key_content)
+    key_file_path = f.name
 
 signer = Signer(
-    tenancy=config["tenancy"],
-    user=config["user"],
-    fingerprint=config["fingerprint"],
-    private_key_content=key_content,
+    tenancy=os.environ["OCI_TENANCY_OCID"],
+    user=os.environ["OCI_USER_OCID"],
+    fingerprint=os.environ["OCI_FINGERPRINT"],
+    private_key_file_location=key_file_path,
 )
 
 ssh_key = os.environ["SSH_PUBLIC_KEY"].strip()
