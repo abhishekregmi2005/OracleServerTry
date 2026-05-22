@@ -1,8 +1,7 @@
 name: Oracle Capacity Sniper
+
 on:
   schedule:
-    # Student/GitHub Pro budget: 19 runs/day * 5 min timeout * 31 days = 2,945 min/month.
-    # Runs are spaced about 75 minutes apart and offset from the top of the hour.
     - cron: '7 0,5,10,15,20 * * *'
     - cron: '22 1,6,11,16,21 * * *'
     - cron: '37 2,7,12,17,22 * * *'
@@ -18,44 +17,17 @@ concurrency:
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     env:
-      INSTANCE_DISPLAY_NAME: AI-Server
-      MAX_ATTEMPTS: 3
+      MAX_ATTEMPTS: 10
       RETRY_SECONDS: 45
-    steps:
-      - name: Write launch config
-        env:
-          OCI_AD: ${{ secrets.OCI_AD }}
-          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
-          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
-          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
-        run: |
-          jq -n \
-            --arg ad "$OCI_AD" \
-            --arg cid "$OCI_COMPARTMENT_ID" \
-            --arg subnet "$OCI_SUBNET_ID" \
-            --arg sshkey "$SSH_PUBLIC_KEY" \
-            '{
-              availabilityDomain: $ad,
-              compartmentId: $cid,
-              displayName: env.INSTANCE_DISPLAY_NAME,
-              shape: "VM.Standard.A1.Flex",
-              shapeConfig: { ocpus: 4, memoryInGBs: 24 },
-              sourceDetails: {
-                sourceType: "image",
-                imageId: "ocid1.image.oc1.us-chicago-1.aaaaaaaaqzxgc5f4hbxsoi4mhogsodroy5wgnvxcpuwpt77gt4wl3a3x6m2q"
-              },
-              subnetId: $subnet,
-              createVnicDetails: {
-                subnetId: $subnet,
-                assignPublicIp: true
-              },
-              metadata: { ssh_authorized_keys: $sshkey }
-            }' > "$RUNNER_TEMP/launch.json"
 
-      - name: Install OCI CLI
-        run: python -m pip install --user --disable-pip-version-check --quiet oci-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install --quiet oci requests
 
       - name: Check for existing instance
         id: existing
@@ -65,67 +37,34 @@ jobs:
           OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
           OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
           OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
-          OCI_AD: ${{ secrets.OCI_AD }}
           OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
         run: |
-          set -euo pipefail
-          export PATH="$HOME/.local/bin:$PATH"
+          pip install --quiet oci-cli
+          for ad in "eqhO:US-CHICAGO-1-AD-1" "eqhO:US-CHICAGO-1-AD-2" "eqhO:US-CHICAGO-1-AD-3"; do
+            instances=$(oci compute instance list \
+              --compartment-id "$OCI_COMPARTMENT_ID" \
+              --availability-domain "$ad" \
+              --display-name "AI-Dev-Server" \
+              --all --output json 2>/dev/null || echo '{"data":[]}')
+            found=$(echo "$instances" | jq -r '[.data[] | select(.["lifecycle-state"] != "TERMINATED")] | length')
+            if [ "$found" -gt 0 ]; then
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              echo "Existing instance found in $ad. Skipping."
+              exit 0
+            fi
+          done
+          echo "found=false" >> "$GITHUB_OUTPUT"
+          echo "No existing instance found. Proceeding."
 
-          instances="$(oci compute instance list \
-            --compartment-id "$OCI_COMPARTMENT_ID" \
-            --availability-domain "$OCI_AD" \
-            --display-name "$INSTANCE_DISPLAY_NAME" \
-            --all \
-            --output json)"
-          existing="$(printf '%s\n' "$instances" | jq -r '[.data[] | select(.["lifecycle-state"] != "TERMINATED") | "\(.id)|\(.["lifecycle-state"])"][0] // ""')"
-
-          if [ -n "$existing" ]; then
-            state="${existing#*|}"
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "Existing ${INSTANCE_DISPLAY_NAME} instance found in ${state} state; skipping launch."
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "No existing ${INSTANCE_DISPLAY_NAME} instance found; launch attempts will run."
-          fi
-
-      - name: Launch Instance
+      - name: Run sniper
         if: steps.existing.outputs.found != 'true'
         env:
-          OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
-          OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
-          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
-          OCI_CLI_REGION: ${{ secrets.OCI_REGION }}
-        run: |
-          set -u
-          export PATH="$HOME/.local/bin:$PATH"
-
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            echo "::group::Launch attempt ${attempt}/${MAX_ATTEMPTS}"
-            if output="$(oci compute instance launch --from-json "file://$RUNNER_TEMP/launch.json" 2>&1)"; then
-              status=0
-            else
-              status=$?
-            fi
-            printf '%s\n' "$output"
-            echo "::endgroup::"
-
-            if [ "$status" -eq 0 ]; then
-              echo "Instance launch request accepted."
-              exit 0
-            fi
-
-            if printf '%s\n' "$output" | grep -qi "Out of host capacity"; then
-              if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-                echo "OCI capacity is unavailable; retrying in ${RETRY_SECONDS}s."
-                sleep "$RETRY_SECONDS"
-                continue
-              fi
-
-              echo "OCI capacity is unavailable after ${MAX_ATTEMPTS} attempts; ending without failing the workflow."
-              exit 0
-            fi
-
-            echo "OCI launch failed for a non-capacity reason."
-            exit "$status"
-          done
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: python launch.py
